@@ -1,4 +1,4 @@
-package Gui;
+package clientView;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionListener;
@@ -65,8 +65,8 @@ public class Home extends JFrame{
         return messageIn.getText();
     }
 
-    public void addMessage(Message message) {
-        chatArea.append(message.toString());
+    public void addMessage(String message) {
+        chatArea.append(message + "\n");
         messageIn.setText("");
     }
 }

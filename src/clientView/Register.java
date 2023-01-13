@@ -1,12 +1,12 @@
-package Gui;
+package clientView;
 
 import javax.swing.*;
 import java.awt.event.ActionListener;
 
 public class Register extends JFrame {
     private final JTextField usernameIn;
-    private final JTextField passwordIn;
-    private final JTextField cPassword;
+    private final JPasswordField passwordIn;
+    private final JPasswordField cPassword;
     private final JButton registerButton;
     private final JButton loginButton;
 
@@ -16,8 +16,8 @@ public class Register extends JFrame {
         JLabel cPasswordLabel = new JLabel("Confirm password: ");
 
         usernameIn = new JTextField();
-        passwordIn = new JTextField();
-        cPassword = new JTextField();
+        passwordIn = new JPasswordField();
+        cPassword = new JPasswordField();
         loginButton = new JButton("Back to login");
         registerButton = new JButton("Register");
 

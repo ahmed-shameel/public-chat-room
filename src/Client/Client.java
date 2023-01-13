@@ -1,29 +1,31 @@
-import Gui.*;
+package Client;
+
+import clientView.*;
 
 import java.io.*;
 import java.net.Socket;
-import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.sql.*;
 
 import java.sql.PreparedStatement;
 
-public class Main {
+public class Client {
+
     //GUI
     private static final Login loginView = new Login();
     private static final Register registerView = new Register();
     private static final Home homeView = new Home();
     private static final MessageDialog messageDialog = new MessageDialog();
 
-    //Client
-    private static boolean running = true;
-    private static final String DEFAULT_HOST = "127.0.0.1";
-    private static final int DEFAULT_PORT = 2000;
-
+    //CONNECTION
     private static Socket clientSocket;
-    private static InputStream inputStream;
-    private static OutputStream outputStream;
-    private static DataInputStream inData;
-    private static DataOutputStream outData;
+    private static BufferedReader in;
+    private static PrintWriter out;
+
+
+
     //Database
     private static final String USERNAME = "usr_21952981";
     private static final String PASSWORD = "952981";
@@ -55,30 +57,6 @@ public class Main {
         });
     }
 
-    private static void initiateDataFromDB() {
-        try {
-            Class.forName("com.mysql.jdbc.Driver").newInstance();
-            connection = DriverManager.getConnection(URL, USERNAME, PASSWORD);
-            Statement command = connection.createStatement();
-
-            //Show old massages
-            ResultSet messageData = command.executeQuery("SELECT * FROM messages");
-            while (messageData.next()){
-                Message message = new Message(messageData.getString("user"),
-                        messageData.getString("message"));
-                homeView.addMessage(message);
-            }
-            //Show users
-            ResultSet usersData = command.executeQuery("SELECT * FROM users");
-            while (usersData.next()){
-                homeView.setUsers(usersData.getString("username"));
-            }
-        } catch (Exception e) {
-            System.out.println(e);
-        }
-    }
-
-
     private static void initiateGui(){
         loginView.setVisible(true);
 
@@ -95,43 +73,12 @@ public class Main {
         });
     }
 
-    private static void sendMessage(){
-        try{
-            if(!homeView.getMessage().isBlank()){
-                Message msg = new Message(loggedInUser.getUsername(), homeView.getMessage());
-
-                outputStream = clientSocket.getOutputStream();
-                outData = new DataOutputStream(outputStream);
-                outData.writeUTF(msg.toString());
-                outData.flush();
-
-                homeView.addMessage(msg);
-                postToDB(msg);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-    }
-
-    private static void postToDB(Message msg) {
-        try {
-            PreparedStatement statement = connection.prepareStatement("INSERT INTO messages VALUES(?,?)");
-            statement.setString(1, msg.getMessage());
-            statement.setString(2, msg.getUser());
-            statement.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
-
-
     private static void login(){
         if(loginView.getUsername().isBlank() || loginView.getPassword().isEmpty()){
             messageDialog.showErrorDialog("Empty Password/Username");
         } else{
             String username = loginView.getUsername();
-            String password = loginView.getPassword();
+            String password = encryptPassword(loginView.getPassword());
 
             try {
                 Statement stm = connection.createStatement();
@@ -140,7 +87,7 @@ public class Main {
 
                 if(rs.next()){
                     loggedInUser = new User(username, password);
-                    setConnection(DEFAULT_HOST, DEFAULT_PORT);
+                    setConnection(loginView.getHost(), loginView.getPort());
                     homeView.setLocationRelativeTo(null);
                     loginView.setVisible(false);
                     homeView.setVisible(true);
@@ -157,12 +104,12 @@ public class Main {
     private static void setConnection(String ip, int port) {
         try{
             clientSocket = new Socket(ip, port);
-            Thread thread = new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    while (running){
-                        listenData();
-                    }
+            out = new PrintWriter(new OutputStreamWriter(clientSocket.getOutputStream(), StandardCharsets.ISO_8859_1), true);
+            in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+
+            Thread thread = new Thread(() -> {
+                while (true){
+                    listenData();
                 }
             });
             thread.start();
@@ -175,12 +122,70 @@ public class Main {
 
     private static void listenData() {
         try {
-            inputStream = clientSocket.getInputStream();
-            inData = new DataInputStream(inputStream);
-            Message message = new Message(loggedInUser.getUsername(), inData.readUTF());
-            homeView.addMessage(message);
+            String msg = in.readLine();
+            while (msg != null){
+                homeView.addMessage(msg);
+                msg = in.readLine();
+            }
+            messageDialog.showErrorDialog("The server has closed!");
+            out.close();
+            clientSocket.close();
+            homeView.dispose();
+
         } catch (IOException ex) {
             System.err.println("ERROR: error listening data" + ex);
+        }
+    }
+
+
+    private static void initiateDataFromDB() {
+        try {
+            Class.forName("com.mysql.jdbc.Driver").newInstance();
+            connection = DriverManager.getConnection(URL, USERNAME, PASSWORD);
+            Statement command = connection.createStatement();
+
+            //Show old massages
+            ResultSet messageData = command.executeQuery("SELECT * FROM messages");
+            while (messageData.next()){
+                String message = messageData.getString("user") +
+                        ": " +messageData.getString("message");
+                homeView.addMessage(message);
+            }
+            //Show users
+            ResultSet usersData = command.executeQuery("SELECT * FROM users");
+            while (usersData.next()){
+                homeView.setUsers(usersData.getString("username"));
+            }
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+    }
+
+    private static void sendMessage(){
+        if(!homeView.getMessage().isBlank()){
+            Thread sender = new Thread(new Runnable() {
+                final String msg = loggedInUser.getUsername() + ": " + homeView.getMessage();
+
+                @Override
+                public void run() {
+                    out.println(msg);
+                    out.flush();
+                    postToDB(msg);
+                }
+            });
+            sender.start();
+        }
+    }
+
+    private static void postToDB(String msg) {
+        String[] split = msg.split(":");
+        try {
+            PreparedStatement statement = connection.prepareStatement("INSERT INTO messages VALUES(?,?)");
+            statement.setString(1, split[1].trim());
+            statement.setString(2, split[0]);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
     }
 
@@ -203,6 +208,8 @@ public class Main {
                     if(!password.equals(cPassword)){
                         registerView.showError("Passwords don't match!");
                     }else {
+                        //Encrypt password before storing in DB
+                        password = encryptPassword(password);
                         PreparedStatement statement = connection.prepareStatement("INSERT INTO users VALUES(?,?)");
                         statement.setString(1, username);
                         statement.setString(2, password);
@@ -217,6 +224,24 @@ public class Main {
                 ex.printStackTrace();
             }
         }
+    }
+
+    //MD5 Hashing Technique
+    private static String encryptPassword(String password){
+        String encryptedpassword = null;
+        try {
+            MessageDigest m = MessageDigest.getInstance("MD5");
+            m.update(password.getBytes());
+            byte[] bytes = m.digest();
+            StringBuilder s = new StringBuilder();
+            for (byte aByte : bytes) {
+                s.append(Integer.toString((aByte & 0xff) + 0x100, 16).substring(1));
+            }
+            encryptedpassword = s.toString();
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        }
+        return encryptedpassword;
     }
 
 }
