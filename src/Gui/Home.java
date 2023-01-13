@@ -53,12 +53,6 @@ public class Home extends JFrame{
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
     }
 
-
-    public void setMessages(Message message){
-        chatArea.append(message.toString());
-        messageIn.setText("");
-    }
-
     public void setUsers(String username) {
         usersArea.append(username + "\n");
     }
@@ -69,5 +63,10 @@ public class Home extends JFrame{
 
     public String getMessage() {
         return messageIn.getText();
+    }
+
+    public void addMessage(Message message) {
+        chatArea.append(message.toString());
+        messageIn.setText("");
     }
 }

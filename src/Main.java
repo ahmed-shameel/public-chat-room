@@ -1,16 +1,30 @@
 import Gui.*;
 
+import java.io.*;
+import java.net.Socket;
+import java.net.UnknownHostException;
 import java.sql.*;
 
 import java.sql.PreparedStatement;
 
 public class Main {
-
+    //GUI
     private static final Login loginView = new Login();
     private static final Register registerView = new Register();
     private static final Home homeView = new Home();
     private static final MessageDialog messageDialog = new MessageDialog();
 
+    //Client
+    private static boolean running = true;
+    private static final String DEFAULT_HOST = "127.0.0.1";
+    private static final int DEFAULT_PORT = 2000;
+
+    private static Socket clientSocket;
+    private static InputStream inputStream;
+    private static OutputStream outputStream;
+    private static DataInputStream inData;
+    private static DataOutputStream outData;
+    //Database
     private static final String USERNAME = "usr_21952981";
     private static final String PASSWORD = "952981";
     private static final String URL = "jdbc:mysql://atlas.dsv.su.se/db_21952981";
@@ -18,26 +32,9 @@ public class Main {
     private static User loggedInUser;
 
     public static void main(String[] args) {
-        try {
-            Class.forName("com.mysql.jdbc.Driver").newInstance();
-            connection = DriverManager.getConnection(URL, USERNAME, PASSWORD);
-            Statement command = connection.createStatement();
 
-            //Show old massages
-            ResultSet messageData = command.executeQuery("SELECT * FROM messages");
-            while (messageData.next()){
-                Message message = new Message(messageData.getString("user"),
-                        messageData.getString("message"));
-                homeView.setMessages(message);
-            }
-            //Show users
-            ResultSet usersData = command.executeQuery("SELECT * FROM users");
-            while (usersData.next()){
-                homeView.setUsers(usersData.getString("username"));
-            }
-        } catch (Exception e) {
-            System.out.println(e);
-        }
+        //Upload data from database
+        initiateDataFromDB();
 
         //Initiate GUI
         initiateGui();
@@ -58,6 +55,30 @@ public class Main {
         });
     }
 
+    private static void initiateDataFromDB() {
+        try {
+            Class.forName("com.mysql.jdbc.Driver").newInstance();
+            connection = DriverManager.getConnection(URL, USERNAME, PASSWORD);
+            Statement command = connection.createStatement();
+
+            //Show old massages
+            ResultSet messageData = command.executeQuery("SELECT * FROM messages");
+            while (messageData.next()){
+                Message message = new Message(messageData.getString("user"),
+                        messageData.getString("message"));
+                homeView.addMessage(message);
+            }
+            //Show users
+            ResultSet usersData = command.executeQuery("SELECT * FROM users");
+            while (usersData.next()){
+                homeView.setUsers(usersData.getString("username"));
+            }
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+    }
+
+
     private static void initiateGui(){
         loginView.setVisible(true);
 
@@ -77,18 +98,33 @@ public class Main {
     private static void sendMessage(){
         try{
             if(!homeView.getMessage().isBlank()){
-                Message message = new Message(loggedInUser.getUsername(), homeView.getMessage());
-                PreparedStatement statement = connection.prepareStatement("INSERT INTO messages VALUES(?,?)");
-                statement.setString(1, message.getMessage());
-                statement.setString(2, message.getUser());
-                statement.executeUpdate();
-                homeView.setMessages(message);
+                Message msg = new Message(loggedInUser.getUsername(), homeView.getMessage());
+
+                outputStream = clientSocket.getOutputStream();
+                outData = new DataOutputStream(outputStream);
+                outData.writeUTF(msg.toString());
+                outData.flush();
+
+                homeView.addMessage(msg);
+                postToDB(msg);
             }
-        } catch (SQLException e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
 
     }
+
+    private static void postToDB(Message msg) {
+        try {
+            PreparedStatement statement = connection.prepareStatement("INSERT INTO messages VALUES(?,?)");
+            statement.setString(1, msg.getMessage());
+            statement.setString(2, msg.getUser());
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
 
     private static void login(){
         if(loginView.getUsername().isBlank() || loginView.getPassword().isEmpty()){
@@ -104,6 +140,7 @@ public class Main {
 
                 if(rs.next()){
                     loggedInUser = new User(username, password);
+                    setConnection(DEFAULT_HOST, DEFAULT_PORT);
                     homeView.setLocationRelativeTo(null);
                     loginView.setVisible(false);
                     homeView.setVisible(true);
@@ -114,6 +151,36 @@ public class Main {
             } catch (SQLException ex) {
                 ex.printStackTrace();
             }
+        }
+    }
+
+    private static void setConnection(String ip, int port) {
+        try{
+            clientSocket = new Socket(ip, port);
+            Thread thread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    while (running){
+                        listenData();
+                    }
+                }
+            });
+            thread.start();
+            // check connection
+            System.out.println("successfully connected to " + ip + ":" + port);
+        } catch (IOException e) {
+            System.out.println("ERROR: connection error" + e);
+        }
+    }
+
+    private static void listenData() {
+        try {
+            inputStream = clientSocket.getInputStream();
+            inData = new DataInputStream(inputStream);
+            Message message = new Message(loggedInUser.getUsername(), inData.readUTF());
+            homeView.addMessage(message);
+        } catch (IOException ex) {
+            System.err.println("ERROR: error listening data" + ex);
         }
     }
 
