@@ -4,16 +4,20 @@ This is a chat application by java using Stream sockets with GUI and MYSQL to sa
 The application uses MD5 Hashing Technique to encrypt the password before storing in the database
 
 SERVER
+
 <img width="482" alt="Screenshot 2023-03-02 at 12 14 25" src="https://user-images.githubusercontent.com/82181516/222413196-12316f1b-eae1-4d4d-8f18-429c66d785bd.png">
 
 Chat Client
 Login:
+
 <img width="452" alt="Screenshot 2023-03-02 at 12 14 43" src="https://user-images.githubusercontent.com/82181516/222413264-75aac18f-1ec3-4ab1-b874-aa5e141895bd.png">
 
 Register
+
 <img width="460" alt="Screenshot 2023-03-02 at 12 15 01" src="https://user-images.githubusercontent.com/82181516/222413342-3e10904e-cfea-4d2e-aac2-a9c81833dd69.png">
 
 Chat room
+
 <img width="649" alt="Screenshot 2023-03-02 at 12 15 25" src="https://user-images.githubusercontent.com/82181516/222413450-f1e4e981-fa87-4083-a918-8e86260f3771.png">
 
 Further development:
